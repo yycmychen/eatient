@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eatient - Mindful Eating Companion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: #f7f5f0; /* Soft Sand */
+            color: #4a4a4a;
+            overscroll-behavior: none; /* Prevent pull-to-refresh on mobile while dragging */
+        }
+        .sage-bg { background-color: #8da399; }
+        .sage-text { color: #5f7a6e; }
+        .sage-border { border-color: #8da399; }
+       
+        .card-enter {
+            animation: fadeIn 0.8s ease-out forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .breathing-circle {
+            animation: breathe 8s infinite ease-in-out;
+        }
+
+        /* Specific animation for the 13s cycle (6s in, 7s out) */
+        .deep-breath-anim {
+            animation: deepBreath 13s infinite ease-in-out;
+        }
+
+        @keyframes deepBreath {
+            0% { transform: scale(1); opacity: 0.7; }
+            46% { transform: scale(1.5); opacity: 1; } /* ~6 seconds (6/13 * 100) */
+            100% { transform: scale(1); opacity: 0.7; }
+        }
+
+        @keyframes breathe {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.15); opacity: 1; }
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Sidebar Styles */
+        .sidebar {
+            transition: transform 0.3s ease-in-out;
+            transform: translateX(-100%);
+        }
+        .sidebar.open {
+            transform: translateX(0);
+        }
+        .overlay {
+            transition: opacity 0.3s ease-in-out;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+       
+        /* Hide scrollbar for clean UI */
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Minigame Styles */
+        .game-card {
+            perspective: 1000px;
+        }
+        .game-card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .game-card.flipped .game-card-inner {
+            transform: rotateY(180deg);
+        }
+        .game-card-front, .game-card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .game-card-back {
+            transform: rotateY(180deg);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- APP CONTAINER -->
+    <div id="app" class="w-full max-w-md relative bg-gray-50/50 rounded-3xl min-h-[600px] overflow-hidden shadow-2xl flex flex-col">
+       
+        <!-- STICKER UNLOCK MODAL (Overlay) -->
+        <div id="sticker-modal" class="hidden absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div class="bg-white rounded-3xl p-8 text-center shadow-2xl card-enter max-w-sm w-full">
+                <i class="fas fa-gift text-5xl text-yellow-400 mb-4 animate-bounce"></i>
+                <h3 class="text-2xl font-bold text-gray-800 mb-2">New Sticker!</h3>
+                <p id="sticker-modal-name" class="text-xl font-bold text-[#8da399] mb-2">New Leaf</p>
+                <p id="sticker-modal-desc" class="text-gray-500 text-sm mb-6">You took the first step!</p>
+                <button onclick="closeStickerModal()" class="bg-[#8da399] text-white px-6 py-2 rounded-xl font-bold hover:bg-[#7a8f85] transition">Awesome!</button>
+            </div>
+        </div>
+
+        <!-- LOGIN SCREEN (Hidden by default) -->
+        <div id="login-screen" class="hidden absolute inset-0 z-30 bg-white flex flex-col items-center justify-center p-8 card-enter">
+            <i class="fas fa-lock text-4xl text-[#8da399] mb-4"></i>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">Welcome Back</h2>
+            <p class="text-gray-500 text-sm mb-6">Please enter your password to continue.</p>
+           
+            <form onsubmit="handleLogin(event)" class="w-full max-w-xs space-y-4">
+                <input type="password" id="loginPassword" required class="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#8da399] text-center" placeholder="Password">
+                <button type="submit" class="w-full bg-[#8da399] text-white font-bold py-3 rounded-xl hover:bg-[#7a8f85] transition shadow-md">
+                    Log In
+                </button>
+            </form>
+            <p id="login-error" class="text-red-400 text-xs mt-4 hidden">Incorrect password.</p>
+        </div>
+
+        <!-- PASSWORD SETUP SCREEN (Hidden by default) -->
+        <div id="password-setup-screen" class="hidden absolute inset-0 z-30 bg-white flex flex-col items-center justify-center p-8 card-enter">
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">Secure Your Account</h2>
+            <p class="text-gray-500 text-sm mb-6 text-center">Create a password so only you can access your diary.</p>
+           
+            <form onsubmit="handleCreatePassword(event)" class="w-full max-w-xs space-y-4">
+                <input type="password" id="newPassword" required class="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#8da399] text-center" placeholder="Create Password">
+                <button type="submit" class="w-full bg-[#8da399] text-white font-bold py-3 rounded-xl hover:bg-[#7a8f85] transition shadow-md">
+                    Set Password
+                </button>
+                <button type="button" onclick="cancelPasswordSetup()" class="w-full text-gray-400 text-sm hover:text-[#8da399] underline">
+                    Cancel
+                </button>
+            </form>
+        </div>
+
+        <!-- INTRO / ONBOARDING SCREEN -->
+        <div id="onboarding-screen" class="hidden bg-white absolute inset-0 z-20 flex flex-col p-8 card-enter overflow-y-auto scrollbar-hide">
+            <div class="text-center mb-6 flex-shrink-0">
+                <i class="fas fa-seedling text-4xl text-[#8da399] mb-3"></i>
+                <h1 class="text-2xl font-bold text-gray-800">Welcome to Eatient</h1>
+                <p class="text-gray-500 text-sm mt-1">Let's understand your journey.</p>
+            </div>
+
+            <form id="onboarding-form" onsubmit="handleSurveySubmit(event)" class="flex-grow">
+                <!-- Name -->
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">What should we call you?</label>
+                    <input type="text" id="userName" required class="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#8da399] transition" placeholder="Your Name">
+                </div>
+
+                <!-- Gender & Age Row -->
+                <div class="flex gap-3 mb-4">
+                    <div class="w-1/2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Gender</label>
+                        <select id="userGender" class="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#8da399]">
+                            <option value="Female">Female</option>
+                            <option value="Male">Male</option>
+                            <option value="Non-binary">Non-binary</option>
+                            <option value="Prefer not to say">Prefer not to say</option>
+                        </select>
+                    </div>
+                    <div class="w-1/2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Age</label>
+                        <input type="number" id="userAge" required min="10" max="100" class="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#8da399]" placeholder="Age">
+                    </div>
+                </div>
+
+                <!-- Height & Weight Range -->
+                <div class="flex gap-3 mb-4">
+                     <div class="w-1/2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Height (cm)</label>
+                        <input type="number" id="userHeight" class="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#8da399]" placeholder="Optional">
+                    </div>
+                    <div class="w-1/2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Weight Range</label>
+                        <select id="userWeightRange" class="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#8da399]">
+                            <option value="Under 50kg">Under 50kg</option>
+                            <option value="50-70kg">50-70kg</option>
+                            <option value="70-90kg">70-90kg</option>
+                            <option value="90kg+">90kg+</option>
+                            <option value="Prefer not to say">Skip</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Challenges -->
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Primary Goal/Challenge</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center p-3 rounded-lg border border-gray-100 bg-gray-50 cursor-pointer hover:bg-green-50 transition">
+                            <input type="radio" name="challenge" value="fast_eating" class="text-[#8da399] focus:ring-[#8da399]" checked>
+                            <span class="ml-3 text-sm text-gray-600">I eat too fast / don't chew enough</span>
+                        </label>
+                        <label class="flex items-center p-3 rounded-lg border border-gray-100 bg-gray-50 cursor-pointer hover:bg-green-50 transition">
+                            <input type="radio" name="challenge" value="emotional_eating" class="text-[#8da399] focus:ring-[#8da399]">
+                            <span class="ml-3 text-sm text-gray-600">Emotional eating (Stress/Boredom)</span>
+                        </label>
+                        <label class="flex items-center p-3 rounded-lg border border-gray-100 bg-gray-50 cursor-pointer hover:bg-green-50 transition">
+                            <input type="radio" name="challenge" value="distracted_eating" class="text-[#8da399] focus:ring-[#8da399]">
+                            <span class="ml-3 text-sm text-gray-600">Distracted eating (TV/Phone)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Feelings -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">How do you usually feel after eating habits you want to change?</label>
+                    <select id="userFeeling" class="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#8da399]">
+                        <option value="Guilty">I often feel guilty</option>
+                        <option value="Pleased">I sometimes feel pleased/controlled</option>
+                        <option value="Neutral">I feel neutral or numb</option>
+                        <option value="Physically Uncomfortable">Physically uncomfortable</option>
+                    </select>
+                    <p class="text-xs text-gray-400 mt-2 italic">* This helps us tailor your mindfulness affirmations.</p>
+                </div>
+
+                <button type="submit" class="w-full bg-[#8da399] text-white font-bold py-3 rounded-xl hover:bg-[#7a8f85] transition shadow-md transform active:scale-95 mb-4">
+                    Submit
+                </button>
+            </form>
+        </div>
+
+        <!-- SIDEBAR MENU & OVERLAY -->
+        <div id="menu-overlay" class="overlay absolute inset-0 bg-black/20 z-30 backdrop-blur-sm" onclick="toggleMenu()"></div>
+       
+        <aside id="sidebar" class="sidebar absolute top-0 left-0 h-full w-64 bg-white z-40 shadow-2xl p-6 flex flex-col justify-between">
+            <div>
+                <div class="flex items-center gap-3 mb-10 text-[#8da399]">
+                    <i class="fas fa-seedling text-2xl"></i>
+                    <span class="font-bold text-xl tracking-tight text-gray-800">Eatient</span>
+                </div>
+               
+                <nav class="space-y-4">
+                    <button onclick="navigate('home')" class="w-full text-left flex items-center gap-4 p-3 rounded-xl hover:bg-green-50 text-gray-600 hover:text-[#8da399] transition">
+                        <i class="fas fa-home w-6 text-center"></i> Home
+                    </button>
+                    <button onclick="navigate('calendar')" class="w-full text-left flex items-center gap-4 p-3 rounded-xl hover:bg-green-50 text-gray-600 hover:text-[#8da399] transition">
+                        <i class="fas fa-calendar-alt w-6 text-center"></i> Calendar
+                    </button>
+                    <button onclick="navigate('report')" class="w-full text-left flex items-center gap-4 p-3 rounded-xl hover:bg-green-50 text-gray-600 hover:text-[#8da399] transition">
+                        <i class="fas fa-utensils w-6 text-center"></i> Eating Report
+                    </button>
+                    <button onclick="navigate('emotions')" class="w-full text-left flex items-center gap-4 p-3 rounded-xl hover:bg-green-50 text-gray-600 hover:text-[#8da399] transition">
+                        <i class="fas fa-heart w-6 text-center"></i> Emotion Tracker
+                    </button>
+                    <button onclick="navigate('minigame')" class="w-full text-left flex items-center gap-4 p-3 rounded-xl hover:bg-green-50 text-gray-600 hover:text-[#8da399] transition">
+                        <i class="fas fa-gamepad w-6 text-center"></i> Minigame
+                    </button>
+                </nav>
+            </div>
+
+            <div class="space-y-2">
+                <button onclick="handleLogout()" class="w-full text-left flex items-center gap-4 p-3 rounded-xl hover:bg-orange-50 text-gray-400 hover:text-orange-400 transition text-sm">
+                    <i class="fas fa-sign-out-alt w-6 text-center"></i> Log Out
+                </button>
+                <button onclick="resetApp()" class="w-full text-left flex items-center gap-4 p-3 rounded-xl hover:bg-red-50 text-gray-400 hover:text-red-400 transition text-sm">
+                    <i class="fas fa-trash-alt w-6 text-center"></i> Reset Data
+                </button>
+            </div>
+        </aside>
+
+        <!-- MAIN DASHBOARD -->
+        <div id="main-dashboard" class="hidden h-full flex flex-col relative flex-1">
+           
+            <!-- Header Bar -->
+            <header class="p-6 flex justify-between items-center bg-transparent relative z-10">
+                <button onclick="toggleMenu()" class="text-gray-600 hover:text-[#8da399] transition p-2 rounded-full hover:bg-white/50">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+                <div class="w-8"></div> <!-- Spacer for balance -->
+            </header>
+
+            <!-- Content Area -->
+            <main id="content-area" class="flex-1 flex flex-col items-center p-6 text-center overflow-y-auto">
+                <!-- Content injected via JS -->
+            </main>
+
+        </div>
+
+    </div>
+
+    <script>
+        // --- DATA & STATE ---
+        let currentUser = {};
+        let currentCalendarDate = new Date();
+        let breathingInterval = null; // State to track breathing loop
+        let breathingStartTime = 0;   // Track start time of breathing session
+
+        // Sticker Definitions
+        const stickerDefs = {
+            'new_leaf': { name: "New Leaf", icon: "fa-leaf", color: "text-green-400", desc: "The first step in your journey..." },
+            'fresh_leaf': { name: "Fresh Leaf", icon: "fa-seedling", color: "text-green-500", desc: "7 days of mindful reports!" },
+            'novice_leaf': { name: "Novice Leaf", icon: "fa-leaf", color: "text-orange-400", desc: "A whole month of dedication." },
+            'silver_leaf': { name: "Silver Leaf", icon: "fa-certificate", color: "text-gray-400", desc: "6 months of progress." },
+            'golden_leaf': { name: "Golden Wise Leafy", icon: "fa-crown", color: "text-yellow-500", desc: "1 year of wisdom!" },
+            'wise_foodie': { name: "Wise Foodie", icon: "fa-utensils", color: "text-blue-400", desc: "Scored 1000 in Food Sorter!" },
+            'robot': { name: "Are you a robot?", icon: "fa-robot", color: "text-purple-500", desc: "Scored 10,000 in Food Sorter. Wow!" },
+            'nutritionist': { name: "Nutritionist", icon: "fa-apple-whole", color: "text-red-400", desc: "Mastered the Nutri-Match game." },
+            'zen': { name: "Zen", icon: "fa-spa", color: "text-teal-400", desc: "10 minutes of deep breathing." },
+            'world_silent': { name: "The World Fell Silent", icon: "fa-mountain", color: "text-indigo-600", desc: "2 hours of pure focus. Unbelievable." },
+            'insane_dedication': { name: "Insane Dedication", icon: "fa-fire", color: "text-orange-500", desc: "Halfway there! Collected 50% of stickers." },
+            'end_beginning': { name: "End of the Beginning", icon: "fa-star", color: "text-yellow-400", desc: "Collected every other sticker. Legend." }
+        };
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const userData = localStorage.getItem('eatientUser');
+           
+            if (userData) {
+                try {
+                    currentUser = JSON.parse(userData);
+                   
+                    // Migrations
+                    if (!currentUser.reports) currentUser.reports = {};
+                    if (!currentUser.stickers) currentUser.stickers = [];
+
+                    if (currentUser.dailyReport) {
+                        currentUser.reports[currentUser.dailyReport.date] = currentUser.dailyReport;
+                    }
+
+                    // CHECK FOR PASSWORD
+                    if (currentUser.password) {
+                        document.getElementById('login-screen').classList.remove('hidden');
+                    } else if(currentUser && currentUser.name) {
+                        showDashboard(currentUser);
+                    } else {
+                         document.getElementById('onboarding-screen').classList.remove('hidden');
+                    }
+                } catch (e) {
+                    console.error("Corrupt data found, resetting.", e);
+                }
+            } else {
+                document.getElementById('onboarding-screen').classList.remove('hidden');
+            }
+        });
+
+        // --- STICKER SYSTEM ---
+        function unlockSticker(key) {
+            if (!currentUser.stickers) currentUser.stickers = [];
+           
+            if (!currentUser.stickers.includes(key)) {
+                currentUser.stickers.push(key);
+                localStorage.setItem('eatientUser', JSON.stringify(currentUser));
+                showStickerModal(stickerDefs[key]);
+               
+                // After unlocking any sticker, check for meta-achievements
+                checkMetaStickers();
+            }
+        }
+
+        function checkMetaStickers() {
+            if (!currentUser.stickers) return;
+
+            // Define keys for special stickers
+            const insaneKey = 'insane_dedication';
+            const endKey = 'end_beginning';
+
+            // Calculate total possible stickers excluding the meta ones
+            const allKeys = Object.keys(stickerDefs);
+            const countableKeys = allKeys.filter(k => k !== insaneKey && k !== endKey);
+            const totalCountable = countableKeys.length;
+           
+            // Count how many valid stickers user has
+            const userCountable = currentUser.stickers.filter(k => k !== insaneKey && k !== endKey).length;
+
+            // Logic for "Insane Dedication" (Half)
+            // Use Math.ceil to be generous if odd number
+            if (userCountable >= Math.ceil(totalCountable / 2)) {
+                unlockSticker(insaneKey);
+            }
+
+            // Logic for "End of the Beginning" (All except itself)
+            // Note: insane_dedication is now part of the collection, so we check if they have everything else
+            // Total collection size should be allKeys.length - 1 (excluding endKey)
+            if (currentUser.stickers.length >= allKeys.length - 1 && !currentUser.stickers.includes(endKey)) {
+                unlockSticker(endKey);
+            }
+        }
+
+        function showStickerModal(sticker) {
+            document.getElementById('sticker-modal-name').textContent = sticker.name;
+            document.getElementById('sticker-modal-desc').textContent = sticker.desc;
+            document.getElementById('sticker-modal').classList.remove('hidden');
+            document.getElementById('sticker-modal').classList.add('flex');
+        }
+
+        function closeStickerModal() {
+            document.getElementById('sticker-modal').classList.add('hidden');
+            document.getElementById('sticker-modal').classList.remove('flex');
+        }
+
+        // --- LOGIN & PASSWORD LOGIC ---
+        function handleLogin(e) {
+            e.preventDefault();
+            const input = document.getElementById('loginPassword').value;
+            const errorMsg = document.getElementById('login-error');
+
+            if (input === currentUser.password) {
+                document.getElementById('login-screen').classList.add('hidden');
+                showDashboard(currentUser);
+            } else {
+                errorMsg.classList.remove('hidden');
+            }
+        }
+
+        function showPasswordSetup() {
+            document.getElementById('password-setup-screen').classList.remove('hidden');
+        }
+
+        function cancelPasswordSetup() {
+            document.getElementById('password-setup-screen').classList.add('hidden');
+        }
+
+        function handleCreatePassword(e) {
+            e.preventDefault();
+            const pass = document.getElementById('newPassword').value;
+            if(pass) {
+                currentUser.password = pass;
+                localStorage.setItem('eatientUser', JSON.stringify(currentUser));
+                document.getElementById('password-setup-screen').classList.add('hidden');
+                renderHome();
+                const btn = document.querySelector('button[onclick="showPasswordSetup()"]');
+                if(btn) btn.innerHTML = '<i class="fas fa-check mr-2"></i>Password Set!';
+            }
+        }
+
+        function handleLogout() {
+            if (breathingInterval) {
+                clearInterval(breathingInterval);
+                breathingInterval = null;
+            }
+            document.getElementById('main-dashboard').classList.add('hidden');
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('menu-overlay');
+            if(sidebar) sidebar.classList.remove('open');
+            if(overlay) overlay.classList.remove('open');
+
+            if (currentUser && currentUser.password) {
+                document.getElementById('loginPassword').value = '';
+                document.getElementById('login-error').classList.add('hidden');
+                document.getElementById('login-screen').classList.remove('hidden');
+            } else {
+                alert("Please create a password first to secure your account.");
+                document.getElementById('main-dashboard').classList.remove('hidden');
+                renderHome();
+                showPasswordSetup();
+            }
+        }
+
+        // --- ONBOARDING LOGIC ---
+        function handleSurveySubmit(e) {
+            e.preventDefault();
+           
+            const userData = {
+                name: document.getElementById('userName').value,
+                gender: document.getElementById('userGender').value,
+                age: document.getElementById('userAge').value,
+                height: document.getElementById('userHeight').value,
+                weightRange: document.getElementById('userWeightRange').value,
+                feeling: document.getElementById('userFeeling').value,
+                challenge: document.querySelector('input[name="challenge"]:checked')?.value || 'fast_eating',
+                reports: {},
+                password: null,
+                stickers: []
+            };
+
+            localStorage.setItem('eatientUser', JSON.stringify(userData));
+            currentUser = userData;
+
+            const onboarding = document.getElementById('onboarding-screen');
+            onboarding.style.opacity = '0';
+            setTimeout(() => {
+                onboarding.classList.add('hidden');
+                showDashboard(userData);
+            }, 500);
+        }
+
+        // --- DASHBOARD LOGIC ---
+        function showDashboard(user) {
+            document.getElementById('main-dashboard').classList.remove('hidden');
+            renderHome();
+        }
+
+        // --- NAVIGATION & MENU ---
+        function toggleMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('menu-overlay');
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('open');
+        }
+
+        function navigate(page) {
+            toggleMenu();
+           
+            if (breathingInterval) {
+                clearInterval(breathingInterval);
+                breathingInterval = null;
+            }
+
+            const content = document.getElementById('content-area');
+            content.style.opacity = '0';
+           
+            setTimeout(() => {
+                if (page === 'home') {
+                    renderHome();
+                } else if (page === 'calendar') {
+                    renderCalendar();
+                } else if (page === 'report') {
+                    renderReport();
+                } else if (page === 'emotions') {
+                    renderEmotions();
+                } else if (page === 'minigame') {
+                    renderMinigameMenu();
+                } else if (page === 'stickers') {
+                    renderStickerAlbum();
+                } else {
+                    renderWorkInProgress();
+                }
+                content.style.opacity = '1';
+            }, 200);
+        }
+
+        function renderHome() {
+            const content = document.getElementById('content-area');
+            content.classList.remove('justify-start');
+            content.classList.add('justify-center');
+           
+            const hasPassword = !!currentUser.password;
+
+            let passwordBtnHtml = '';
+            if (!hasPassword) {
+                passwordBtnHtml = `
+                    <button onclick="showPasswordSetup()" class="mt-4 px-6 py-2 bg-blue-100 text-blue-500 rounded-xl font-bold text-sm hover:bg-blue-200 transition">
+                        <i class="fas fa-lock mr-2"></i>Make Password
+                    </button>
+                `;
+            }
+
+            content.innerHTML = `
+                <div class="card-enter w-full flex flex-col items-center">
+                    <i class="fas fa-smile-beam text-6xl text-[#8da399] mb-6 breathing-circle"></i>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-2">Welcome to Eatient</h1>
+                    <h2 class="text-2xl font-medium sage-text mb-8">${currentUser.name || 'Friend'}</h2>
+                    <p class="text-gray-500 text-sm mb-8 max-w-xs mx-auto">Your journey to mindful eating begins here.</p>
+                   
+                    <div class="flex flex-col gap-3 w-full max-w-xs items-center">
+                        <button onclick="navigate('stickers')" class="w-full px-6 py-3 bg-yellow-100 text-yellow-600 rounded-xl font-bold text-sm hover:bg-yellow-200 transition flex items-center justify-center gap-2 shadow-sm">
+                            <i class="fas fa-star"></i> Sticker Collection
+                        </button>
+                        ${passwordBtnHtml}
+                        <button onclick="handleLogout()" class="w-full px-6 py-2 border-2 border-gray-200 text-gray-400 rounded-xl font-bold text-sm hover:bg-gray-50 transition">
+                            Log Out
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderWorkInProgress() {
+            const content = document.getElementById('content-area');
+            content.classList.remove('justify-start');
+            content.classList.add('justify-center');
+            content.innerHTML = `
+                <div class="card-enter w-full flex flex-col items-center">
+                    <i class="fas fa-tools text-5xl text-gray-300 mb-6"></i>
+                    <h2 class="text-2xl font-bold text-gray-400">Work in progress ;]</h2>
+                    <button onclick="navigate('home')" class="mt-8 text-sm text-[#8da399] font-bold hover:underline">Return Home</button>
+                </div>
+            `;
+        }
+
+        // --- STICKER ALBUM LOGIC ---
+        function renderStickerAlbum() {
+            const content = document.getElementById('content-area');
+            content.classList.remove('justify-start');
+            content.classList.add('justify-center');
+
+            const myStickers = currentUser.stickers || [];
+            const allStickers = Object.keys(stickerDefs);
+
+            let gridHtml = '';
+           
+            allStickers.forEach(key => {
+                const def = stickerDefs[key];
+                const hasSticker = myStickers.includes(key);
+               
+                // Style: If hasSticker is true, show full color. Else gray/dimmed.
+                const bgClass = hasSticker ? "bg-white border-[#8da399]" : "bg-gray-100 border-gray-200";
+                const iconColor = hasSticker ? def.color : "text-gray-300";
+                const opacity = hasSticker ? "opacity-100" : "opacity-60 grayscale";
+                const lockIcon = hasSticker ? "" : `<div class="absolute top-2 right-2 text-gray-300"><i class="fas fa-lock"></i></div>`;
+
+                gridHtml += `
+                    <div class="relative ${bgClass} border-2 rounded-2xl p-4 flex flex-col items-center text-center shadow-sm transition h-32 justify-center ${opacity}">
+                        ${lockIcon}
+                        <i class="fas ${def.icon} text-3xl ${iconColor} mb-2"></i>
+                        <h4 class="font-bold text-xs text-gray-700 mb-1">${def.name}</h4>
+                        <p class="text-[10px] text-gray-500 leading-tight">${def.desc}</p>
+                    </div>
+                `;
+            });
+
+            content.innerHTML = `
+                <div class="card-enter w-full max-w-md h-full flex flex-col">
+                    <button onclick="navigate('home')" class="self-start mb-4 text-gray-400 hover:text-[#8da399] transition text-sm font-bold"><i class="fas fa-arrow-left mr-2"></i>Back</button>
+                   
+                    <div class="text-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">Sticker Album</h2>
+                        <p class="text-sm text-gray-500">Collect them all by staying consistent!</p>
+                        <p class="text-xs text-gray-400 mt-1">Unlocked: ${myStickers.length} / ${allStickers.length}</p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 overflow-y-auto pb-4">
+                        ${gridHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function calculateStreak() {
+            if (!currentUser.reports) return 0;
+           
+            // Get all report dates and sort them (newest first)
+            const dates = Object.keys(currentUser.reports)
+                .map(d => new Date(d))
+                .sort((a, b) => b - a);
+
+            if (dates.length === 0) return 0;
+
+            let streak = 0;
+            const today = new Date();
+            today.setHours(0,0,0,0);
+           
+            // If the latest report wasn't today or yesterday, streak is broken (0)
+            const latest = new Date(dates[0]);
+            latest.setHours(0,0,0,0);
+           
+            const diffTime = Math.abs(today - latest);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            // Allow streak to continue if latest entry is today (0 diff) or yesterday (1 diff)
+            if (diffDays > 1) return 0;
+
+            // Count backwards
+            let checkDate = new Date(latest);
+            streak = 1; // Count the first one found
+
+            for (let i = 1; i < dates.length; i++) {
+                const prevDate = new Date(checkDate);
+                prevDate.setDate(prevDate.getDate() - 1); // Expected previous day
+               
+                const currentReportDate = new Date(dates[i]);
+                currentReportDate.setHours(0,0,0,0);
+                prevDate.setHours(0,0,0,0);
+
+                if (currentReportDate.getTime() === prevDate.getTime()) {
+                    streak++;
+                    checkDate = prevDate;
+                } else {
+                    break;
+                }
+            }
+            return streak;
+        }
+
+        function checkAndAwardStickers() {
+            const reportsCount = Object.keys(currentUser.reports).length;
+            const streak = calculateStreak();
+           
+            if (reportsCount >= 1) unlockSticker('new_leaf');
+            if (streak >= 7) unlockSticker('fresh_leaf');
+            if (streak >= 30) unlockSticker('novice_leaf');
+            if (streak >= 180) unlockSticker('silver_leaf');
+            if (streak >= 365) unlockSticker('golden_leaf');
+        }
+
+        // --- CALENDAR LOGIC ---
+        function renderCalendar() {
+            const content = document.getElementById('content-area');
+            content.classList.remove('justify-center');
+            content.classList.add('justify-start');
+
+            const year = currentCalendarDate.getFullYear();
+            const month = currentCalendarDate.getMonth();
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+           
+            content.innerHTML = `
+                <div class="card-enter w-full flex flex-col h-full">
+                    <div class="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm">
+                        <button onclick="changeMonth(-1)" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-green-50 text-gray-400 hover:text-[#8da399] transition"><i class="fas fa-chevron-left"></i></button>
+                        <h2 class="text-xl font-bold text-gray-700">${monthNames[month]} <span class="font-light">${year}</span></h2>
+                        <button onclick="changeMonth(1)" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-green-50 text-gray-400 hover:text-[#8da399] transition"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                   
+                    <div class="bg-white rounded-3xl shadow-sm p-4 flex-1 flex flex-col">
+                        <div class="grid grid-cols-7 gap-1 text-xs font-bold text-[#8da399] mb-4 uppercase tracking-wider text-center">
+                            <div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
+                        </div>
+                        <div class="grid grid-cols-7 gap-2 flex-1 auto-rows-fr" id="calendar-grid">
+                            <!-- Days generated here -->
+                        </div>
+                    </div>
+                </div>
+            `;
+            generateCalendarGrid(year, month);
+        }
+
+        function changeMonth(step) {
+            currentCalendarDate.setMonth(currentCalendarDate.getMonth() + step);
+            renderCalendar();
+        }
+
+        function generateCalendarGrid(year, month) {
+            const grid = document.getElementById('calendar-grid');
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const today = new Date();
+           
+            let html = '';
+           
+            for (let i = 0; i < firstDay; i++) {
+                html += `<div></div>`;
+            }
+           
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateObj = new Date(year, month, day);
+                const dateStr = dateObj.toDateString();
+               
+                const isToday = dateStr === today.toDateString();
+                const isPast = dateObj < today && !isToday;
+                const hasReport = currentUser.reports && currentUser.reports[dateStr];
+
+                let baseClasses = "aspect-square flex items-center justify-center rounded-xl text-sm font-medium transition duration-200 select-none border-2 border-transparent";
+                let activeClasses = "";
+                let clickHandler = "";
+
+                if (isToday) {
+                    baseClasses += " border-[#8da399]";
+                    if (hasReport) {
+                         activeClasses = "bg-[#8da399] text-white shadow-md cursor-pointer hover:bg-[#7a8f85]";
+                    } else {
+                         activeClasses = "text-[#8da399] bg-green-50 cursor-pointer hover:bg-green-100";
+                    }
+                    clickHandler = `onclick="renderDayDetails('${dateStr}')"`;
+                } else if (hasReport) {
+                    activeClasses = "bg-[#8da399] text-white shadow-sm cursor-pointer hover:bg-[#7a8f85] opacity-80";
+                    clickHandler = `onclick="renderDayDetails('${dateStr}')"`;
+                } else if (isPast) {
+                    activeClasses = "text-gray-400 hover:bg-gray-100 cursor-pointer";
+                    clickHandler = `onclick="renderDayDetails('${dateStr}')"`;
+                } else {
+                    activeClasses = "text-gray-300 cursor-default";
+                }
+
+                html += `
+                    <div class="${baseClasses} ${activeClasses}" ${clickHandler}>
+                        ${day}
+                    </div>
+                `;
+            }
+            grid.innerHTML = html;
+        }
+
+        function renderDayDetails(dateStr) {
+            const content = document.getElementById('content-area');
+            content.classList.remove('justify-start');
+            content.classList.add('justify-center');
+
+            const report = (currentUser.reports && currentUser.reports[dateStr]) || null;
+            const isDone = !!report;
+
+            let statusText = "not finished :[";
+            let statusColor = "text-red-400";
+           
+            if (isDone) {
+                statusText = "done :)";
+                statusColor = "text-green-500";
+            }
+
+            let parentAdvice = "";
+            let expertAdvice = "";
+            let improvementTips = [];
+
+            if (!isDone) {
+                const todayStr = new Date().toDateString();
+                if (dateStr === todayStr) {
+                    parentAdvice = "My dear, taking care of yourself starts with small steps. Please let us know how you are doing today!";
+                    expertAdvice = "Tracking your habits is the first step to mindfulness. Try to log your feelings when you can.";
+                } else {
+                     parentAdvice = "We missed you on this day, but every new day is a fresh start. We believe in you!";
+                     expertAdvice = "Consistency helps, but don't stress over missed days. Just pick up where you left off.";
+                }
+                improvementTips = [
+                    "Start small: Try to log just one meal tomorrow.",
+                    "Set a gentle reminder on your phone to check in.",
+                    "Remember that missing a day is part of the journey, not a failure."
+                ];
+            } else {
+                if (report.isSick) {
+                    parentAdvice = "Oh honey, rest up! Your health is the most important thing. Don't worry about anything else right now. We love you!";
+                    expertAdvice = "When immune systems are down, focus on hydration and simple carbohydrates. Listen to your body's need for rest.";
+                    improvementTips = [
+                        "Prioritize hydration: Sip water or herbal tea throughout the day.",
+                        "Choose easily digestible foods like soups, toast, or rice.",
+                        "Rest is productive. Allow your body the energy it needs to heal."
+                    ];
+                } else {
+                    // Logic based on daily report
+                    if (report.guilt === 'yes' || report.guilt === 'maybe') {
+                        parentAdvice = "You are so precious to us. Please be kind to yourself. You deserve to be happy and nourished.";
+                        expertAdvice = "Guilt often leads to a cycle of stress. Remember, no single meal defines your health. Food is morally neutral.";
+                    } else if (report.selfView === 'Positive') {
+                        parentAdvice = "It's wonderful to see you thriving! Keep shining bright. We are so proud of you.";
+                        expertAdvice = "Great job tuning into your body. This positive mindset is a powerful tool for your health.";
+                    } else {
+                        parentAdvice = "We are glad you checked in. Remember you are loved exactly as you are.";
+                        expertAdvice = "Maintenance is progress. Keep listening to your hunger cues.";
+                    }
+
+                    // Personalized Tips Logic
+                    // 1. Based on specific challenge
+                    if (currentUser.challenge === 'fast_eating') {
+                        improvementTips.push("Put your fork down between bites to slow your pace.");
+                        improvementTips.push("Try to chew each bite thoroughly before swallowing.");
+                    } else if (currentUser.challenge === 'distracted_eating') {
+                        improvementTips.push("Try eating one meal today without screens or phones.");
+                        improvementTips.push("Focus entirely on the texture and flavor of your food.");
+                    } else if (currentUser.challenge === 'emotional_eating') {
+                        improvementTips.push("Pause before eating to ask: 'Am I hungry or experiencing an emotion?'");
+                        improvementTips.push("Find a non-food way to soothe stress, like deep breathing or a short walk.");
+                    }
+
+                    // 2. Based on report specifics
+                    if (report.guilt === 'yes' || report.guilt === 'maybe') {
+                        improvementTips.push("Practice self-forgiveness. One meal does not define your health.");
+                    }
+                    if (report.selfView === 'Negative') {
+                        improvementTips.push("Speak to yourself as you would to a dear friend.");
+                    }
+                    if (report.cravings && report.cravings.length > 0 && report.cravings.length < 20) {
+                         // Simple check to ensure craving text isn't too long to display
+                        improvementTips.push(`Acknowledge your craving for ${report.cravings}. It's okay to satisfy it mindfully.`);
+                    }
+
+                    // Fallback
+                    if (improvementTips.length < 3) {
+                        improvementTips.push("Drink a glass of water before meals to stay hydrated.");
+                        improvementTips.push("Listen to your body's hunger cues.");
+                    }
+                }
+            }
+
+            const dateDisplay = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+           
+            // Format tips into list items
+            const tipsHtml = improvementTips.slice(0, 3).map(tip => `
+                <li class="flex items-start">
+                    <i class="fas fa-check text-purple-300 mt-1 mr-2 text-xs"></i>
+                    <span>${tip}</span>
+                </li>
+            `).join('');
+
+            content.innerHTML = `
+                <div class="card-enter w-full max-w-sm text-left pb-10">
+                    <button onclick="navigate('calendar')" class="mb-4 text-gray-400 hover:text-[#8da399] transition text-sm font-bold"><i class="fas fa-arrow-left mr-2"></i>Back to Calendar</button>
+                   
+                    <h2 class="text-2xl font-bold text-gray-800 mb-1 text-center">Insight for</h2>
+                    <p class="text-sm font-medium text-gray-500 text-center mb-6 uppercase tracking-wide">${dateDisplay}</p>
+                   
+                    <div class="bg-white rounded-2xl shadow-sm p-6 mb-6 text-center">
+                        <p class="text-sm text-gray-500 uppercase tracking-wide font-bold mb-2">Report Status</p>
+                        <p class="text-2xl font-bold ${statusColor}">${statusText}</p>
+                    </div>
+
+                    <div class="bg-blue-50 border-l-4 border-blue-400 rounded-r-xl p-4 mb-4">
+                        <div class="flex items-center mb-2">
+                            <i class="fas fa-home text-blue-400 mr-2"></i>
+                            <h3 class="font-bold text-gray-700 text-sm">From a Caring Parent</h3>
+                        </div>
+                        <p class="text-gray-600 text-sm italic">"${parentAdvice}"</p>
+                    </div>
+
+                    <div class="bg-green-50 border-l-4 border-green-400 rounded-r-xl p-4 mb-6">
+                        <div class="flex items-center mb-2">
+                            <i class="fas fa-user-md text-green-400 mr-2"></i>
+                            <h3 class="font-bold text-gray-700 text-sm">From a Food Expert</h3>
+                        </div>
+                        <p class="text-gray-600 text-sm italic">"${expertAdvice}"</p>
+                    </div>
+
+                    <!-- Personalized Growth Steps -->
+                    <div class="bg-purple-50 rounded-2xl p-6 shadow-sm border border-purple-100">
+                        <h3 class="font-bold text-gray-700 mb-3 flex items-center">
+                            <i class="fas fa-seedling text-purple-400 mr-2"></i>
+                            Gentle Steps Forward
+                        </h3>
+                        <ul class="space-y-2 text-sm text-gray-600">
+                            ${tipsHtml}
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- EATING REPORT LOGIC ---
+        function renderReport() {
+            const content = document.getElementById('content-area');
+            content.classList.remove('justify-center');
+            content.classList.add('justify-center');
+
+            const today = new Date().toDateString();
+            if (currentUser.reports && currentUser.reports[today]) {
+                renderAlreadySubmitted();
+                return;
+            }
+
+            content.classList.remove('justify-center');
+            content.classList.add('justify-start');
+
+            content.innerHTML = `
+                <div class="card-enter w-full max-w-sm text-left pb-10">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center"><i class="fas fa-utensils text-[#8da399] mr-2"></i>Daily Check-in</h2>
+                    <form onsubmit="handleReportSubmit(event)" class="space-y-5">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">How are you feeling today?</label>
+                            <textarea id="reportFeelings" required class="w-full px-4 py-3 rounded-xl bg-white border-0 shadow-sm focus:ring-2 focus:ring-[#8da399] outline-none transition" rows="3" placeholder="I feel..."></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">What do you want to eat right now?</label>
+                            <input type="text" id="reportCravings" required class="w-full px-4 py-3 rounded-xl bg-white border-0 shadow-sm focus:ring-2 focus:ring-[#8da399] outline-none transition" placeholder="e.g., An apple, pizza...">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Are you feeling sick physically?</label>
+                            <div class="flex gap-4">
+                                <label class="flex items-center bg-white px-4 py-3 rounded-xl shadow-sm cursor-pointer flex-1 justify-center hover:bg-green-50 transition">
+                                    <input type="radio" name="sick" value="yes" class="text-[#8da399] focus:ring-[#8da399]">
+                                    <span class="ml-2 text-sm text-gray-600">Yes</span>
+                                </label>
+                                <label class="flex items-center bg-white px-4 py-3 rounded-xl shadow-sm cursor-pointer flex-1 justify-center hover:bg-green-50 transition">
+                                    <input type="radio" name="sick" value="no" checked class="text-[#8da399] focus:ring-[#8da399]">
+                                    <span class="ml-2 text-sm text-gray-600">No</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">How do you view yourself today?</label>
+                             <select id="reportSelfView" class="w-full px-4 py-3 rounded-xl bg-white border-0 shadow-sm focus:ring-2 focus:ring-[#8da399] outline-none transition">
+                                <option value="Positive">Positive</option>
+                                <option value="Negative">Negative</option>
+                                <option value="Neutral">Neutral/Mixed</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Would you feel guilty eating now?</label>
+                            <select id="reportGuilt" class="w-full px-4 py-3 rounded-xl bg-white border-0 shadow-sm focus:ring-2 focus:ring-[#8da399] outline-none transition">
+                                <option value="no">No, food is fuel.</option>
+                                <option value="maybe">Maybe a little.</option>
+                                <option value="yes">Yes, I might.</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="w-full bg-[#8da399] text-white font-bold py-3 rounded-xl hover:bg-[#7a8f85] transition shadow-md mt-4">
+                            Submit Report
+                        </button>
+                    </form>
+                </div>
+            `;
+        }
+
+        function handleReportSubmit(e) {
+            e.preventDefault();
+            const todayStr = new Date().toDateString();
+            const reportData = {
+                date: todayStr,
+                feelings: document.getElementById('reportFeelings').value,
+                cravings: document.getElementById('reportCravings').value,
+                isSick: document.querySelector('input[name="sick"]:checked')?.value === 'yes',
+                selfView: document.getElementById('reportSelfView').value,
+                guilt: document.getElementById('reportGuilt').value
+            };
+            if (!currentUser.reports) currentUser.reports = {};
+            currentUser.reports[todayStr] = reportData;
+            localStorage.setItem('eatientUser', JSON.stringify(currentUser));
+           
+            checkAndAwardStickers(); // Global report/streak check
+
+            const content = document.getElementById('content-area');
+            content.style.opacity = '0';
+            setTimeout(() => {
+                renderThankYou();
+                content.style.opacity = '1';
+            }, 200);
+        }
+
+        function renderThankYou() {
+            const content = document.getElementById('content-area');
+            content.classList.remove('justify-start');
+            content.classList.add('justify-center');
+            content.innerHTML = `
+                <div class="card-enter w-full flex flex-col items-center">
+                    <i class="fas fa-check-circle text-6xl text-[#8da399] mb-6 breathing-circle"></i>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Thank you for submitting your daily report! :)</h2>
+                    <p class="text-gray-500 text-sm mb-8">Come back tomorrow.</p>
+                    <button onclick="navigate('home')" class="text-sm text-[#8da399] font-bold hover:underline">Return Home</button>
+                </div>
+            `;
+        }
+
+        function renderAlreadySubmitted() {
+            const content = document.getElementById('content-area');
+            content.innerHTML = `
+                <div class="card-enter w-full flex flex-col items-center px-6">
+                    <i class="fas fa-calendar-check text-5xl text-gray-300 mb-6"></i>
+                    <h2 class="text-xl font-bold text-gray-600 text-center leading-relaxed">We appreciate your dedication but please come back tomorrow for more advice ;]</h2>
+                    <button onclick="navigate('home')" class="mt-8 text-sm text-[#8da399] font-bold hover:underline">Return Home</button>
+                </div>
+            `;
+        }
+
+        // --- EMOTION TRACKER LOGIC ---
+        function renderEmotions() {
+            const content = document.getElementById('content-area');
+            content.classList.remove('justify-center');
+            content.classList.add('justify-start');
+
+            const today = new Date().toDateString();
+            const report = (currentUser.reports && currentUser.reports[today]) || null;
+            const hasReport = !!report;
+
+            const displayPhysical = hasReport ? (report.isSick ? "Unwell" : "Well") : "null";
+            const displaySelfView = hasReport ? report.selfView : "null";
+            const displayCravings = hasReport ? report.cravings : "null";
+           
+            let advice = "Listen to your body. You are doing great.";
+           
+            if (hasReport) {
+                if (report.isSick) {
+                    advice = "Focus on healing and hydration today. It's okay to rest.";
+                } else if (report.selfView === "Negative") {
+                    advice = "Treat yourself with the same kindness you would offer a friend.";
+                } else if (report.guilt === "yes") {
+                    advice = "Remember: Food has no moral value. You deserve nourishment.";
+                } else if (report.selfView === "Positive") {
+                    advice = "Hold onto this positive feeling. You are nourishing your life.";
+                }
+            } else {
+                 advice = "Complete your Eating Report to get personalized advice.";
+            }
+
+            content.innerHTML = `
+                <div class="card-enter w-full max-w-sm text-left">
+                     <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center"><i class="fas fa-heart text-[#8da399] mr-2"></i>Daily Tracker</h2>
+                   
+                    <div class="bg-white rounded-2xl shadow-sm p-6 space-y-4 mb-6">
+                        <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+                            <span class="text-sm font-bold text-gray-500 uppercase tracking-wide">Physical Status</span>
+                            <span class="text-lg font-bold ${displayPhysical === 'Well' ? 'text-green-500' : (displayPhysical === 'Unwell' ? 'text-red-400' : 'text-gray-400')}">${displayPhysical}</span>
+                        </div>
+                        <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+                            <span class="text-sm font-bold text-gray-500 uppercase tracking-wide">Self-View</span>
+                            <span class="text-lg font-bold ${displaySelfView === 'Positive' ? 'text-blue-500' : (displaySelfView === 'Negative' ? 'text-orange-400' : 'text-gray-400')}">${displaySelfView}</span>
+                        </div>
+                        <div class="flex flex-col border-b border-gray-100 pb-3">
+                            <span class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-1">Cravings</span>
+                            <span class="text-md font-medium text-gray-700 break-words">${displayCravings}</span>
+                        </div>
+                    </div>
+                    <div class="bg-[#8da399] rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+                        <i class="fas fa-quote-right absolute top-4 right-4 opacity-20 text-4xl"></i>
+                        <span class="text-xs font-bold uppercase tracking-widest opacity-80 block mb-2">Advice of the Day</span>
+                        <p class="text-lg font-medium leading-relaxed">"${advice}"</p>
+                    </div>
+                    ${!hasReport ? `
+                        <button onclick="navigate('report')" class="w-full mt-6 text-sm text-gray-400 hover:text-[#8da399] underline text-center block">
+                            Fill out report to see data
+                        </button>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        // --- MINIGAME FUNCTIONS ---
+        function renderMinigameMenu() {
+            const content = document.getElementById('content-area');
+            content.classList.remove('justify-start');
+            content.classList.add('justify-center');
+            content.innerHTML = `
+                <div class="card-enter w-full flex flex-col items-center gap-6">
+                    <h2 class="text-2xl font-bold text-gray-800">Select a Game</h2>
+                   
+                    <button onclick="renderFoodSorter()" class="w-full max-w-xs bg-white p-6 rounded-2xl shadow-md hover:shadow-lg transition flex items-center gap-4 group">
+                        <div class="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 group-hover:scale-110 transition">
+                            <i class="fas fa-apple-whole text-xl"></i>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="font-bold text-gray-700">Food Sorter</h3>
+                            <p class="text-xs text-gray-400">Drag to Healthy or Unhealthy</p>
+                        </div>
+                    </button>
+
+                    <button onclick="renderCardMatcher()" class="w-full max-w-xs bg-white p-6 rounded-2xl shadow-md hover:shadow-lg transition flex items-center gap-4 group">
+                        <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-500 group-hover:scale-110 transition">
+                            <i class="fas fa-layer-group text-xl"></i>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="font-bold text-gray-700">Nutri-Match</h3>
+                            <p class="text-xs text-gray-400">Match foods with fun facts!</p>
+                        </div>
+                    </button>
+
+                    <button onclick="renderBreathingExercise()" class="w-full max-w-xs bg-white p-6 rounded-2xl shadow-md hover:shadow-lg transition flex items-center gap-4 group">
+                        <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center text-purple-500 group-hover:scale-110 transition">
+                            <i class="fas fa-wind text-xl"></i>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="font-bold text-gray-700">Breathing</h3>
+                            <p class="text-xs text-gray-400">Deep calm exercise</p>
+                        </div>
+                    </button>
+
+                    <button onclick="navigate('home')" class="text-sm text-gray-400 hover:text-[#8da399] underline mt-4">Back Home</button>
+                </div>
+            `;
+        }
+
+        // --- NEW BREATHING EXERCISE ---
+        function renderBreathingExercise() {
+            const content = document.getElementById('content-area');
+            content.classList.remove('justify-start');
+            content.classList.add('justify-center');
+
+            breathingStartTime = Date.now();
+
+            content.innerHTML = `
+                <div class="card-enter w-full flex flex-col items-center text-center">
+                    <button onclick="navigate('minigame')" class="self-start mb-6 text-gray-400 hover:text-[#8da399] transition text-sm font-bold"><i class="fas fa-arrow-left mr-2"></i>Back</button>
+                   
+                    <h2 class="text-2xl font-bold text-gray-800 mb-8">Let's take a break together</h2>
+                   
+                    <div class="relative w-48 h-48 flex items-center justify-center mb-8">
+                        <!-- Animated Circle -->
+                        <div class="absolute w-full h-full bg-blue-100 rounded-full deep-breath-anim opacity-50"></div>
+                        <div class="relative w-32 h-32 bg-[#8da399] rounded-full flex items-center justify-center text-white shadow-xl z-10">
+                            <i class="fas fa-lungs text-4xl"></i>
+                        </div>
+                    </div>
+
+                    <p id="breath-text" class="text-xl font-medium text-[#8da399] mb-2">Inhale...</p>
+                    <p class="text-xs text-gray-400">Inhale for 6s, Exhale for 7s</p>
+                    <p id="breath-timer" class="text-[25px] text-gray-300 mt-8">00:00</p>
+                </div>
+            `;
+
+            startBreathingCycle();
+        }
+
+        function startBreathingCycle() {
+            const textEl = document.getElementById('breath-text');
+            const timeEl = document.getElementById('breath-timer');
+            if(!textEl) return;
+
+            const inhaleTime = 6000;
+            const totalTime = 13000;
+
+            function cycle() {
+                if(!document.getElementById('breath-text')) return;
+               
+                textEl.textContent = "Inhale...";
+                textEl.className = "text-xl font-bold text-[#8da399] mb-2 transition-all duration-500 scale-110";
+
+                setTimeout(() => {
+                    if(!document.getElementById('breath-text')) return;
+                    textEl.textContent = "Exhale...";
+                    textEl.className = "text-xl font-medium text-blue-400 mb-2 transition-all duration-500 scale-100";
+                }, inhaleTime);
+            }
+
+            function updateTime() {
+                if(!document.getElementById('breath-text')) return;
+               
+                const elapsed = Date.now() - breathingStartTime;
+                const minutes = Math.floor(elapsed / 60000);
+                const seconds = Math.floor((elapsed % 60000) / 1000);
+                timeEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+                // Check achievements
+                if (elapsed > 10 * 60 * 1000) unlockSticker('zen');
+                if (elapsed > 120 * 60 * 1000) unlockSticker('world_silent');
+            }
+
+            cycle();
+            breathingInterval = setInterval(() => {
+                cycle();
+            }, totalTime);
+
+            // Separate timer for display and checks
+            setInterval(updateTime, 1000);
+        }
+
+
+        // --- GAME 1: FOOD SORTER (Endless Mode) ---
+        let sortScore = 0;
+        let currentFood = null;
+        const foods = [
+            { name: "Apple", type: "healthy", icon: "fa-apple-whole", color: "text-red-500", info: "Apples are great for fiber and keeping you full!" },
+            { name: "Soda", type: "unhealthy", icon: "fa-wine-bottle", color: "text-purple-500", info: "Soda has lots of sugar. Water is a better hydrator!" },
+            { name: "Carrot", type: "healthy", icon: "fa-carrot", color: "text-orange-500", info: "Carrots are crunchy and full of Vitamin A for your eyes." },
+            { name: "Pizza", type: "unhealthy", icon: "fa-pizza-slice", color: "text-yellow-500", info: "Pizza can be greasy. Try homemade with veggies!" },
+            { name: "Broccoli", type: "healthy", icon: "fa-leaf", color: "text-green-500", info: "Broccoli is a super green full of vitamins." },
+            { name: "Candy", type: "unhealthy", icon: "fa-candy-cane", color: "text-pink-500", info: "Candy is high in sugar. Treat yourself occasionally!" }
+        ];
+
+        function renderFoodSorter() {
+            sortScore = 0;
+            pickRandomFood();
+            updateFoodSorterUI();
+        }
+
+        function pickRandomFood() {
+             currentFood = foods[Math.floor(Math.random() * foods.length)];
+        }
+       
+        function restartFoodSorter() {
+             sortScore = 0;
+             pickRandomFood();
+             updateFoodSorterUI();
+        }
+
+        function updateFoodSorterUI() {
+            const content = document.getElementById('content-area');
+            content.classList.remove('justify-start');
+            content.classList.add('justify-center');
+
+            const food = currentFood;
+
+            content.innerHTML = `
+                <div class="w-full max-w-sm h-full flex flex-col relative">
+                    <div class="flex justify-between items-center mb-4">
+                         <button onclick="renderMinigameMenu()" class="text-gray-400"><i class="fas fa-times"></i></button>
+                         <span class="font-bold text-[#8da399]">Score: ${sortScore}</span>
+                    </div>
+
+                    <div class="flex-1 flex flex-col items-center justify-center relative">
+                        <!-- Food Item (Draggable simulation) -->
+                        <div id="draggable-food"
+                             class="w-32 h-32 bg-white rounded-full shadow-xl flex flex-col items-center justify-center z-10 cursor-grab active:cursor-grabbing touch-none"
+                             style="position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); transition: transform 0.1s;">
+                            <i class="fas ${food.icon} text-5xl ${food.color} mb-2 pointer-events-none"></i>
+                            <span class="text-sm font-bold text-gray-700 pointer-events-none">${food.name}</span>
+                        </div>
+                        <p class="absolute top-[55%] text-xs text-gray-400 animate-pulse">Drag me!</p>
+
+                        <!-- Baskets -->
+                        <div class="absolute bottom-10 w-full flex justify-between px-2">
+                            <div class="w-36 h-32 border-2 border-dashed border-red-300 rounded-2xl flex flex-col items-center justify-center bg-red-50/50">
+                                <span class="text-red-400 font-bold mb-2">Unhealthy</span>
+                                <i class="fas fa-trash-alt text-2xl text-red-300 opacity-50"></i>
+                            </div>
+                            <div class="w-36 h-32 border-2 border-dashed border-green-300 rounded-2xl flex flex-col items-center justify-center bg-green-50/50">
+                                <span class="text-green-500 font-bold mb-2">Healthy</span>
+                                <i class="fas fa-heart text-2xl text-green-300 opacity-50"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Init Drag Logic
+            initDragLogic(food);
+        }
+
+        function initDragLogic(food) {
+            const el = document.getElementById('draggable-food');
+            let startX, startY, currentX, currentY;
+            let isDragging = false;
+           
+            // Mouse Events
+            el.addEventListener('mousedown', startDrag);
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', endDrag);
+           
+            // Touch Events
+            el.addEventListener('touchstart', (e) => startDrag(e.touches[0]));
+            document.addEventListener('touchmove', (e) => drag(e.touches[0]));
+            document.addEventListener('touchend', endDrag);
+
+            function startDrag(e) {
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                el.style.transition = 'none';
+            }
+
+            function drag(e) {
+                if (!isDragging) return;
+                e.preventDefault?.(); // Prevent scrolling on touch
+                currentX = e.clientX - startX;
+                currentY = e.clientY - startY;
+                el.style.transform = `translate(calc(-50% + ${currentX}px), calc(-50% + ${currentY}px)) rotate(${currentX * 0.1}deg)`;
+            }
+
+            function endDrag() {
+                if (!isDragging) return;
+                isDragging = false;
+               
+                // Check Drop Zones (Threshold approx 80px left or right)
+                if (currentX < -80) { // Left (Unhealthy)
+                    checkAnswer('unhealthy');
+                } else if (currentX > 80) { // Right (Healthy)
+                    checkAnswer('healthy');
+                } else {
+                    // Reset
+                    el.style.transition = 'transform 0.3s ease-out';
+                    el.style.transform = 'translate(-50%, -50%)';
+                }
+            }
+
+            function checkAnswer(choice) {
+                if (choice === currentFood.type) {
+                    sortScore += 10;
+                   
+                    // Check Score Achievements
+                    if (sortScore >= 1000) unlockSticker('wise_foodie');
+                    if (sortScore >= 10000) unlockSticker('robot');
+
+                    pickRandomFood();
+                    updateFoodSorterUI();
+                } else {
+                    showFoodInfo(currentFood);
+                }
+            }
+        }
+
+        function showFoodInfo(food) {
+             const content = document.getElementById('content-area');
+             content.innerHTML = `
+                <div class="card-enter w-full flex flex-col items-center text-center p-4">
+                    <div class="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                         <i class="fas ${food.icon} text-4xl ${food.color}"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-gray-800 mb-2">Oops! Game Over.</h2>
+                    <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-6">
+                        <p class="text-gray-600 italic">"${food.info}"</p>
+                        <p class="text-sm text-gray-400 mt-2">Score achieved: ${sortScore}</p>
+                    </div>
+                    <button onclick="restartFoodSorter()" class="bg-[#8da399] text-white px-8 py-3 rounded-xl font-bold shadow-md">Try Again</button>
+                    <button onclick="renderMinigameMenu()" class="text-gray-400 mt-4 text-sm underline">Exit</button>
+                </div>
+             `;
+        }
+
+
+        // --- GAME 2: CARD MATCHING ---
+        let cards = [];
+        let flippedCards = [];
+        let matchedPairs = 0;
+        const cardData = [
+            { id: 1, type: 'icon', content: '<i class="fas fa-apple-whole text-red-500 text-4xl"></i>', pairId: 1 },
+            { id: 2, type: 'text', content: 'High Fiber', pairId: 1 },
+            { id: 3, type: 'icon', content: '<i class="fas fa-carrot text-orange-500 text-4xl"></i>', pairId: 2 },
+            { id: 4, type: 'text', content: 'Eye Health', pairId: 2 },
+            { id: 5, type: 'icon', content: '<i class="fas fa-water text-blue-500 text-4xl"></i>', pairId: 3 },
+            { id: 6, type: 'text', content: 'Hydration', pairId: 3 },
+            { id: 7, type: 'icon', content: '<i class="fas fa-fish text-indigo-500 text-4xl"></i>', pairId: 4 },
+            { id: 8, type: 'text', content: 'Brain Food', pairId: 4 }
+        ];
+
+        function renderCardMatcher() {
+            // Shuffle
+            matchedPairs = 0;
+            flippedCards = [];
+            cards = [...cardData].sort(() => Math.random() - 0.5);
+           
+            const content = document.getElementById('content-area');
+            content.classList.remove('justify-start');
+            content.classList.add('justify-center');
+
+            updateCardGrid();
+        }
+
+        function updateCardGrid() {
+            const content = document.getElementById('content-area');
+           
+            // Check Win
+            if (matchedPairs === cardData.length / 2) {
+                 unlockSticker('nutritionist'); // Unlock Achievement
+                 content.innerHTML = `
+                    <div class="card-enter w-full flex flex-col items-center">
+                        <i class="fas fa-star text-6xl text-yellow-400 mb-4 breathing-circle"></i>
+                        <h2 class="text-2xl font-bold text-gray-800">Memory Master!</h2>
+                        <button onclick="renderMinigameMenu()" class="mt-6 bg-[#8da399] text-white px-6 py-2 rounded-xl">Back to Menu</button>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <div class="w-full max-w-sm">
+                    <div class="flex justify-between items-center mb-6 px-2">
+                        <h3 class="font-bold text-gray-700">Nutri-Match</h3>
+                        <button onclick="renderMinigameMenu()" class="text-gray-400"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="grid grid-cols-4 gap-3">
+            `;
+
+            cards.forEach((card, index) => {
+                // If matched, invisible or dimmed. If flipped, show content. Else back.
+                const isFlipped = flippedCards.includes(index) || card.matched;
+                const visibility = card.matched ? "opacity-50 pointer-events-none" : "";
+               
+                // Add the 'flipped' class to the OUTER container (.game-card)
+                html += `
+                    <div class="game-card h-20 cursor-pointer ${visibility} ${isFlipped ? 'flipped' : ''}" onclick="flipCard(${index})">
+                        <div class="game-card-inner">
+                            <div class="game-card-front bg-[#8da399] text-white">
+                                <i class="fas fa-question"></i>
+                            </div>
+                            <div class="game-card-back bg-white border-2 border-[#8da399] p-1 text-center text-xs font-bold text-gray-600">
+                                ${card.content}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `</div></div>`;
+            content.innerHTML = html;
+        }
+
+        function flipCard(index) {
+            if (flippedCards.length >= 2 || flippedCards.includes(index) || cards[index].matched) return;
+
+            flippedCards.push(index);
+            updateCardGrid();
+
+            if (flippedCards.length === 2) {
+                setTimeout(checkMatch, 1000);
+            }
+        }
+
+        function checkMatch() {
+            const [idx1, idx2] = flippedCards;
+            const card1 = cards[idx1];
+            const card2 = cards[idx2];
+
+            if (card1.pairId === card2.pairId) {
+                card1.matched = true;
+                card2.matched = true;
+                matchedPairs++;
+            }
+           
+            flippedCards = [];
+            updateCardGrid();
+        }
+
+        function resetApp() {
+            if(confirm("Start over? This will clear your data.")) {
+                localStorage.removeItem('eatientUser');
+                location.reload();
+            }
+        }
+
+    </script>
+</body>
+</html>
